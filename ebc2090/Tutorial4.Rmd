@@ -1,0 +1,657 @@
+---
+title: "Tutorial4"
+author: "Andre"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Tutorial 4: Cointegration and more on ARDL models
+
+## 1. Setting up R
+
+```{R Setting up R}
+
+load("BEL_data.Rdata")
+names(BEL_data)
+attach(BEL_data)
+```
+
+## 2. Explaining the set-up
+
+We will investigate the hypothesis that the pair $(lnIO_{t}, lnYO_{t})$ is "cointegrated". To this end, we will follow two different paths. First, we will assume we know the exact value of the long-run parameter binding the two series. Second, we will recognize our ignorance, and estimate the long-run parameter.
+
+**What does it mean if two series are cointegrated?**
+
+[Cross Validated](https://stats.stackexchange.com/tags/cointegration/info)
+
+Two or more non-stationary, integrated variables are cointegrated if there exists a linear combination of those variables which is integrated of a lower order, e.g. stationary. This implies that there is some equilibrium relationship between these variables.
+
+## 3. Cointegration between investment and output with known long-run parameter
+
+**Define the following series:**
+
+$$
+LNAPIO_{t} \equiv lnIO_{t} - lnYO_{t}
+$$ 
+This is the log of the **Average propensity to Invest** $APIO_{t} \equiv IO_{t}/YO_{t}$ (in constant prices).
+
+**Generate this variable in R.**
+
+```{R Defining the series}
+
+IO_ts <- ts(BEL_data$IO, start = 1950, frequency = 1)
+YO_ts <- ts(BEL_data$YO, start = 1950, frequency = 1)
+
+lnIO <- log(IO_ts)
+lnYO <- log(YO_ts)
+
+LNAPIO <- lnIO - lnYO;
+```
+
+If $LNAPIO_{t}$ is $I(0)$, while its components $lnIO_{t}$ and $lnYO_{t}$ are $I(1)$, then $lnIO_{t}$ and $lnYO_{t}$ are cointegrated. In this case, investment expenditures will, over time, adapt proportionally to variations in output.
+
+**What is the known value of the long-run parameter binding the two series** $lnIO$ and $lnYO$ in this case?
+
+The value of the long-run parameter binding the two series is the value of the beta coefficient in model $(14)$. This value was $1.06149$ in the previous tutorial.
+
+**Line Graph of the series** $LNAPIO_{t}$.
+
+```{R Line Plot of LNAPIO}
+
+plot(x = LNAPIO, type = "l")
+
+```
+
+**Does it look stationary?**
+
+No! The $E(Y_{t})$ and the $Var(Y_{t})$ do not seem constant.
+
+**Apply the Augmented Dickey-Fuller test to the** $LNAPIO_{t}$ series.
+
+```{R ADF Test}
+library(bootUR)
+
+df_LNAPIO <- adf(LNAPIO, deterministics = "none", max_lag = 0)
+df_LNAPIO
+```
+
+```{R}
+
+df_LNAPIO_2 <- adf(LNAPIO, deterministics = "intercept", max_lag = 0)
+df_LNAPIO_2
+
+```
+
+**Which deterministic terms do you include in your unit root test?**
+
+I included a deterministic term "intercept".
+
+**What is your conclusion: is $LNAPIO_{t}$ stationary or not? What does this mean in terms of the pair of series $(lnIO_{t}, lnYO_{t})$: are they cointegrated or not?**
+
+The conclusion of the ADF test is that the series is not stationary. Thus both variables are not cointegrated.
+
+```{R Line plots of IO and YO}
+
+ts.plot(lnIO, lnYO,  col = c("blue", "black"), lty = c(1,1))
+title(main = "Time series plot of Investment and Output", sub = "In the logarithmic form", ylab = "IO and YO", xlab = "Time")
+legend("topleft", legend = c("lnIO", "lnYO"), col = c("blue", "black"), lty = c(1,1))
+
+```
+
+The line plots look relatively constant thus there should be a term $\beta$ that estimates the long-term relationship between the two.
+
+## 4. Cointegration between investment and output with estimated long-run parameter.
+
+Consider the regression model
+
+$$
+\tag{19}
+lnIO_{t} = \beta_{0} + \beta_{1} lnYO_{t} + u_{t}
+$$
+
+**Where have you encountered this model before? What did we discuss back then?**
+
+We have encountered this equation in the previous tutorial where we discussed whether this regression was spurious or not.
+
+**Estimate the regression model $(19)$. What is the value of $\beta_{1}$**
+
+```{R Model (19)}
+
+
+model19 <- lm(lnIO~lnYO) 
+summary(model19)
+```
+
+The model looks like:
+
+$$
+\tag{19'}
+lnIO_{t} = \underset{(0.29042)}{-2.30465} + \underset{(0.02387)}{1.06149} \space lnYO_{t} + u_{t}
+$$
+
+The value of $\beta_{1} = 1.06149$
+
+**Save the residuals of the estimated regression model $(19)$ and make a time series plot of the residuals.**
+
+```{R Residual Model 19}
+
+resid19 <- model19$residuals
+
+# Plot of residuals
+
+plot(x = resid19, type = "l", ylab = "Residuals", xlab = "Time")
+title(main = "Residuals of Model (19)", )
+
+```
+
+**Do they look stationary?**
+
+NO!
+
+**Now apply the Engle-Granger approach to test for cointegration.**
+
+The first step is done already: you estimated the static cointegrating regression (19). The second step is to test for a unit root in the residuals ˆut of the cointegrating regression.
+
+```{R Engle-Granger Approach (1)}
+
+df_resid19 <- adf(resid19, deterministics = "none", max_lag = 0)
+df_resid19
+
+```
+
+**For this, use an ADF test. Which deterministic terms do you include in your unit root test?**
+
+I did the ADF test both without a trend and without an intercept because residuals do not have an intercept.
+
+**Obtain the output of the ADF test on the residuals. Do not inspect the output yet but first explain an important difference between the ADF test performed here on the residuals, and let us say any ADF test we performed earlier on, so for instance the ADF test performed on the series** $lnIO_{t}$ to determine its order of integration?
+
+The previous ADF test were performed on time series processes that we could observe. This time we are testing the stationarity of the error term $u_{t}$ using the residual as a proxy.
+
+**Note that the ADF critical values and p-values reported by R (or any other software package) are in this case NOT appropriate for the cointegration test. This is because they ignore the fact that the test is applied to a residual series $\hat{u}_{t}$ rather than the "true errors" $u_{t}$, which of course are unobservable. The residual series is a stand-in for the "true errors" and is calculated so as to minimize its sum of squares (the OLS principle). This tends to make it appear somewhat more stationary than it actually is**
+
+<center>
+
+| Critical values for Engle-Granger ADF cointegration test |
+|----------------------------------------------------------|
+
+| Number of variables | $\alpha = 0.01$ | $\alpha = 0.05$ | $\alpha = 0.10$ |
+|:-------------------:|:---------------:|:---------------:|:---------------:|
+|          2          |     $-3.96$     |     $-3.41$     |     $-3.12$     |
+|          3          |     $-4.36$     |     $-3.80$     |     $-3.52$     |
+|          4          |     $-4.73$     |     $-4.16$     |     $3.84$      |
+|          5          |     $-5.07$     |     $-4.49$     |     $-4.20$     |
+
+</center>
+
+**So do not interpret the p-value of the ADF unit root test on the residuals that R provides, but compare the value of the test statistic (from the output) to the correct critical value in the provided table. What do you conclude: does the residual series have a unit root or not? What does this mean in terms of the pair of series** $(lnIO_{t}, lnYO_{t})$: are they cointegrated or not?
+
+The t-statistic from the test is below the critical value thus not extreme enough for us to reject the null. The residuals are not stationary and thus the pair $(lnIO_{t}, lnYO_{t})$ is not cointegrated.
+
+**Maybe some of you rejected the null hypothesis of no cointegration in part 2, yet failed to do so in part 3. Strangely, it looks as if the arbitrarily postulated elasticity in part 2 is closer than the freely estimated one in part 3 to the true long-run effect. Could it be that the estimation step in part 3 is causing a loss of power in the cointegration test? Try to explain the phenomenon. (Hint: Which test is more powerful, if valid?)**
+
+The Engle-Granger approach takes the uncertainty of testing on estimated variables (rather than observed ones into account). This means that the critical values are made "more negative" to make sure that we do not wrongly reject the null hypothesis when it is very close to the Dickey-Fuller critical values.
+
+The Engle-Granger approach has a lower power than the standard ADF because we base our test on estimated results rather than observed ones. 
+
+## 5. Back to the ARDL model.
+
+Reconsider the $ARDL(1,1)$ model
+
+$$
+\tag{20}
+lnIO_{t} = \beta_{0} + \beta_{1} \space lnYO_{t} + \beta_{2} \space lnYO_{t - 1} + \beta_{3} \space lnIO_{t - 1} + u_{t}
+$$
+
+**Start by obtaining the regression output of the ARDL(1,1) model (once more; no discussion needed). We will not go through all specific models in the tutorials, but consider a selection of them!**
+
+```{R Model 20}
+
+# Create lagged variables
+
+lags_lnIO <- embed(lnIO, dimension = 2)
+lags_lnYO <- embed(lnYO, dimension = 2)
+
+lnIO_0 <- lags_lnIO[, 1]
+lnIO_1 <- lags_lnIO[, 2]
+
+lnYO_0 <- lags_lnYO[, 1]
+lnYO_1 <- lags_lnYO[, 2]
+
+# Regression
+
+model20 <- lm(lnIO_0~lnYO_0 + lnYO_1 + lnIO_1)
+summary(model20)
+
+```
+
+## 6. Two-period Distributed Lag Model
+
+Consider the Finite Distributed Lag Model of order one:
+
+$$
+\tag{21}
+lnIO_{t} = \beta_{0} + \beta_{1} \space lnYO_{t} + \beta_{2} \space lnYO_{t - 1} + u_{t}
+$$
+
+**Formulate the restriction under which the ARDL(1,1) simplifies into the ARDL(0,1) model as a null hypothesis.**
+
+$$
+\beta_{3} = 0
+$$
+
+**Test whether the simplifying restriction is statistically acceptable. What is your conclusion?**
+
+In model 20, $\beta_{3}$ is individually significant.
+
+```{R F-Test Model 20}
+
+library(car)
+
+linearHypothesis(model20, c("lnIO_1=0"), test="F")
+
+```
+
+
+
+My conclusion is that $lnIO_{t - 1}$ is significantly different from zero. We reject the null hypothesis.
+
+**Estimate the ARDL(0,1) model (21). What is the value of the impact multiplier? Is it statistically significant?**
+
+```{R Model 21}
+
+
+model21 <- lm(lnIO_0~lnYO_0 + lnYO_1)
+summary(model21)
+
+```
+
+The value of the impact multiplier is $\beta_{1} = 3.6344$ and it is statistically significant.
+
+**Derive the expression of the value of the two-year multiplier (see definition Tutorial 3). What is the value of the estimated two-year multiplier in your case? Is it statistically significant?**
+
+Reminder: You need to test a hypothesis involving a combination of parameters. If the combination is linear in the parameters, you may use the function `linearHypothesis` from the previous tutorial. If the combination is non-linear in the parameters, you need to use the theta-trick and use the `nls` function from the previous tutorial.
+
+The two-year multiplier is:
+
+$$
+\begin{split}
+\theta_{2} &= (\frac {\partial}{\partial x_{t}} + \frac {\partial}{\partial x_{t - 1}})(\beta_{0} + \beta_{1} x_{t} + \beta_{2} x_{t - 1})
+\\
+&= \frac {\partial}{\partial x_{t}}(\beta_{0} + \beta_{1} x_{t} + \beta_{2} x_{t - 1}) + \frac {\partial}{\partial x_{t - 1}}(\beta_{0} + \beta_{1} x_{t} + \beta_{2} x_{t - 1})
+\\
+&= \frac {\partial}{\partial x_{t}} \beta_{1} x_{t} + \frac {\partial}{\partial x_{t - 1}} \beta_{2} x_{t - 1}
+\\
+\theta_{2} &= \beta_{1} + \beta_{2}
+\end{split}
+$$
+
+```{R Two-Year Multiplier}
+
+nls_theta2 = nls(lnIO_0 ~ beta0 + (theta2 - beta2)*lnYO_0 + beta2*lnYO_1 , start = list(beta0 = 1, theta2 = 1, beta2 = 1))
+
+summary(nls_theta2)
+
+```
+
+**Derive the expression of the value of the long-run multiplier (see definition Tutorial 3). What is the value of the estimated long-run multiplier in your case? Is it statistically significant**
+
+$$
+\begin{split}
+
+lnIO_{t} &= \beta_{0} + \beta_{1} \space lnYO_{t} + \beta_{2} \space lnYO_{t - 1} + u_{t}
+\\
+y_{t} &= \beta_{0} + \beta_{1} \space x_{t} + \beta_{2} \space x_{t - 1} + u_{t}
+\\
+y_{*} &= \beta_{0} + \beta_{1} \space x_{*} + \beta_{2} \space x_{*} + u_{t}
+\\
+y_{*} &= \beta_{0} +(\beta_{1} + \beta_{2}) x_{*} + u_{*}
+\\
+\theta_{\infty} &= \beta_{1} + \beta_{2}
+\end{split}
+
+$$
+
+**Final note: While you should derive the expressions of the impact, two-year and long-run multiplier from regression model (21) above, importantly (as a double check): notice that you can use the same expression (you derived for the general ARDL(1,1) during last tutorial) for all the special cases as well, by taking in the proper coefficient restrictions (which in some cases is very easy)... Illustrate this double check here!**
+
+Restriction on model $(20)$:
+
+$$
+\beta_{3} = 0
+$$
+
+Impact multiplier of $ARDL(1,1)$ to $ADRL(0,1)$:
+
+$$
+
+\underset{\text{from tutorial 3}}{\theta_{1} = \beta_{1}} \implies \underset{\text{for tutorial 4}}{\theta_{1} = \beta_{1}}
+
+$$
+
+Two-year multiplier of $ARDL(1,1)$ to $ADRL(0,1)$:
+
+$$
+
+\underset{\text{from tutorial 3}}{\theta_{2} = \beta_{1} + \beta_{2} + \beta_{3} \times \beta_{1}} \implies \underset{\text{for tutorial 4}}{\theta_{2} = \beta_{1} + \beta_{2}}
+
+$$
+
+Long-run multiplier of $ARDL(1,1)$ to $ADRL(0,1)$:
+
+$$
+
+\underset{\text{from tutorial 3}}{\theta_{\infty} = \frac {\beta_{1} + \beta_{2}}{1 - \beta_{3}}} \implies \underset{\text{for tutorial 4}}{\theta_{\infty} = \frac {\beta_{1} + \beta_{2}}{1}}
+
+$$
+
+## 7. Partial Adjustment Model
+
+Consider the $ARDL(1, 0)$ model
+
+$$ 
+\tag{22}
+
+y_{t} = \beta_{0} + \beta_{1} x_{t} + \beta_{3} y_{t - 1} + u_{t}
+
+$$
+
+Here, the only lagged variable on the right-hand side is the lagged dependent variable. This specification is called a partial adjustment model in the jargon of econometrics.
+
+**The apparent simplicity of model (22) is misleading. Show that (22) actually implies an infinite distributed lag.**
+
+$$
+
+\begin{split}
+
+y_{t} &= \beta_{0} + \beta_{1} x_{t} + \beta_{3} y_{t - 1} + u_{t}
+\\
+y_{t} &= \beta_{0} + \beta_{1} x_{t} + \beta_{3}(\beta_{0} + \beta_{1} x_{t - 1} + \beta_{3} y_{t - 2} + u_{t - 1}) + u_{t}
+\\
+y_{t} &= \beta_{0} + \beta_{1} x_{t} + \beta_{3}(\beta_{0} + \beta_{1} x_{t - 1} + \beta_{3}( \beta_{0} + \beta_{1} x_{t - 2} + \beta_{3} y_{t - 3} + u_{t - 2}) + u_{t - 1}) + u_{t}
+\\
+&\dots
+
+\end{split}
+
+$$
+
+**Formulate the restriction under which the ARDL(1,1) simplifies into the ARDL(1,0) model as a null hypothesis.**
+
+The restriction is:
+
+$$
+
+\beta_{2} = 0
+
+$$ 
+
+**Test whether the simplifying restriction is statistically acceptable. What is your conclusion?**
+
+```{R }
+
+linearHypothesis(model20, c("lnYO_1=0"), test = "F")
+
+```
+
+The p-value of the $\beta_{2}$ coefficient in model 20 is extremely low thus this restriction is very unlikely to be acceptable.
+
+**Estimate the ARDL(1,0) model (22). What is the value of the impact multiplier? Is it statistically significant?**
+
+```{R Model 22}
+
+model22 <- lm(lnIO_0~lnYO_0 + lnIO_1)
+summary(model22)
+
+```
+
+The value of the impact multiplier is $0.28343$ and it is statistically significant since its p-value is $0.00452$.
+
+**Derive the expression of the value of the two-year multiplier (see definition Tutorial 3). What is the value of the estimated two-year multiplier in your case? Is it statistically significant?**
+
+$$
+
+\begin{split}
+y_{t} &= \beta_{0} + \beta_{1} x_{t} + \beta_{3} y_{t - 1} + u_{t}
+\\
+y_{t} &= \beta_{0} + \beta_{1} x_{t} + \beta_{3}(\beta_{0} + \beta_{1} x_{t - 1} + \beta_{3} y_{t - 2} + u_{t - 1}) + u_{t}
+\\
+y_{t} &= \beta_{0} + \beta_{1} x_{t} + \beta_{3} \beta_{0} + \beta_{3} \beta_{1} x_{t - 1} + \beta_{3}  \beta_{3} y_{t - 2} + \beta_{3} u_{t - 1} + u_{t}
+
+\end{split}
+
+$$
+
+The two-year multiplier is:
+
+$$
+\theta_{2} = \beta_{1} + \beta_{3} \beta_{1}
+$$
+
+```{R Two-year Multiplier}
+
+
+nls_theta_2 = nls(lnIO_0 ~ beta0 + (theta2/(1 + beta3))*lnYO_0 + beta3*lnIO_1, start = list(beta0 = 1, theta2 = 1, beta3 = 1))
+
+summary(nls_theta_2)
+```
+
+The two-year multiplier is significant.
+
+**Derive the expression of the value of the long-run multiplier (see definition Tutorial 3). What is the value of the estimated long-run multiplier in your case? Is it statistically significant?**
+
+$$
+
+
+\begin{split}
+
+y_{t} &= \beta_{0} + \beta_{1} x_{t} + \beta_{3} y_{t - 1} + u_{t} 
+\\
+y_{*} &= \beta_{0} + \beta_{1} x_{*} + \beta_{3} y_{*} + u_{*} 
+\\
+y_{*} - \beta_{3} y_{*} &= \beta_{0} + \beta_{1} x_{*} + u_{t}
+\\
+y_{*}(1 - \beta_{3}) &= \beta_{0} + \beta_{1} x_{*} + u_{t}
+\\
+y_{*} &= \frac{\beta_{0}}{1 - \beta_{3}} + \frac {\beta_{1}}{1 - \beta_{3}} x_{*} + ...
+\end{split}
+```
+$$
+
+The long-run multiplier is equal to
+
+$$
+\theta_{\infty} = \frac {\beta_{1}}{1 - \beta_{3}}
+$$
+
+```{R Long-Run Multiplier}
+
+nls_theta_inf = nls(lnIO_0 ~ beta0 + (theta3 * (1 - beta3))*lnYO_0 + beta3*lnIO_1, start = list(beta0 = 0.28343, theta3 = 1, beta3 = 0.72150))
+
+summary(nls_theta_inf)
+
+```
+
+## 8. Error Correcting Model
+
+In an **Error Correcting Model (ECM)**, lags of both the dependent and the explanatory variables appear
+
+$$ 
+\tag{23}
+
+\Delta y_{t} = \alpha_{0} + \alpha_{1} \Delta x_{t} + \delta(y_{t - 1} - \beta x_{t - 1}) + u_{t}
+
+$$
+
+**Estimate this equation in two steps.**
+
+```{R First}
+
+
+model23_1 <- lm(lnIO_0~lnYO_0)
+resid23 <- model23_1$residuals
+
+lags_resid23 <- embed(resid23, dimension = 2)
+resid23_1 <- lags_resid23[, 1]
+
+
+dlnIO_0 <- diff(lnIO_0)
+dlnYO_0 <- diff(lnYO_0)
+
+model23 <- lm(dlnIO_0~dlnYO_0 + resid23_1)
+summary(model23)
+
+length(resid23_1)
+
+```
+
+**You should observe that there is a close connection between ECMs and co-integration: they depend on one another! This is the famous “representation theorem” of Engle & Granger (1987). Explain this connection!**
+
+The term in the bracket is the cointegration requirement that there is a linear relationship between the two non-stationary time-series.
+
+**If there is cointegration, what sign to you expect for the coefficient δ of the error correction term?**
+
+It should tend to be negative.
+
+**If there is no cointegration relationship, what should the coefficient δ tend to in large samples?**
+
+It should tend to 0.
+
+**Lastly, why is no test of restrictions under which the ARDL(1,1) simplifies into this ECM model asked here?**
+
+This model is not a simplification of the ARDL(1,1).
+
+## 9. Unit-elasticity Resticted ECM
+
+An important special case of the ECM imposes the condition that the long-run elasticity of the dependent variable with respect to the independent one equals 1. In equation (23), this means that β = 1, and the model may therefore be written
+
+$$
+\tag{24}
+
+\Delta y_{t} = \alpha_{0} + \alpha_{1} \Delta x_{t} + \delta(y_{t - 1} - x_{t - 1}) + u_{t}
+
+$$
+
+**Where have you encountered the cointegration relation with known long-run elasticity before? What did you conclude then?**
+
+At exercise 3. I concluded that they were not cointegrated.
+
+**Formulate the restriction under which the ARDL(1,1) simplifies into model (24) as a null hypothesis.**
+
+It might be that 
+
+$$
+\beta_{1} + \beta_{2} + \beta_{3} = 1
+$$
+**Test whether the simplifying restriction is statistically acceptable. What is your conclusion?**
+
+```{R}
+
+linearHypothesis(model20, c("lnYO_0 + lnYO_1 + lnIO_1 = 1"), type ="F")
+
+```
+
+
+
+**Estimate the restricted unit-elasticity ECM. To this end, you first need to define a new variable being the difference between $y_{t−1}$ and $x_{t−1}$ which you can then directly use as (second) explanatory variable is (24). (Note that you have defined the variable $y_t − x_t$ already before. Which variable was this? Now you need to obtain its lag....). Pay attention to the lengths of the variables involved!**
+
+```{R }
+
+
+lags_LNAPIO <- embed(LNAPIO, dimension = 2)
+
+LNAPIO_0 <- lags_LNAPIO[, 1]
+LNAPIO_1 <- lags_LNAPIO[, 2]
+
+model24 <- lm(dlnIO_0~dlnYO_0 + resid23_1)
+summary(model24)
+
+length(dlnIO_0)
+length(dlnYO_0)
+length(resid23_1)
+
+```
+
+
+```{R two-Year}
+
+beta1 = 
+
+
+nls_theta_two = nls(dlnIO_0 ~ alpha0 + ((theta2 + delta)/(1 + delta)) * dlnYO_0 + delta*resid23_1, start = list(alpha0 = 1, theta2 = 1, delta = 1))
+
+summary(nls_theta_two)
+
+
+
+```
+
+
+
+## 10. Model in Growth Rates
+
+**Formulate the restriction under which the ARDL(1,1) simplifies into model (25) as a null hypothesis.**
+
+$$
+\begin{split}
+
+\beta_{2} + \beta_{1} &= 0
+\\
+\beta_{3} &= 1
+
+\end{split}
+$$
+
+```{R}
+
+linearHypothesis(model20, c("lnYO_0 + lnYO_1 = 0","lnIO_1 = 1"), test = "F")
+
+```
+
+**Estimate the model (25) in growth rates. What is the value of the impact multiplier? Is it statistically significant?**
+
+```{R Model 25}
+
+
+model25 <- lm(dlnIO_0~dlnYO_0)
+summary(model25)
+
+```
+
+The impact multipler is $2.88874$.
+
+
+## 11. Static Model
+
+**Formulate the restriction under which the ARDL(1,1) simplifies into model (26) as a null hypothesis**
+
+$$
+\begin{split}
+
+\beta_{2} &= 0
+\\
+\beta_{3} &= 0
+
+\end{split}
+$$
+**Test whether the simplifying restriction is statistically acceptable. What is your conclusion?**
+
+```{R}
+
+linearHypothesis(model20, c("lnYO_1 = 0", "lnIO_1 = 0"), test = "F")
+
+```
+
+**Estimate the static model (26). What is the value of the impact multiplier? Is it statistically significant?**
+
+```{R Model 26}
+
+model26 <- lm(lnIO~lnYO)
+summary(model26)
+```
+
+## 12. Implied long-run equilibrium.
+
+

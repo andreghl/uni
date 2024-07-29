@@ -1,0 +1,1272 @@
+---
+title: "Belgium"
+author: "Andre-Ignace Ghonda Lukoki"
+date: "Dec 19th, 2023"
+output:
+    tufte::tufte_html: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+
+
+## Set-up
+
+```{R set-up, echo = FALSE, results = 'hide', warning = FALSE, message = FALSE}
+
+load("BEL_data.Rdata")
+attach(BEL_data)
+
+# View variables
+
+names(BEL_data)
+
+# Load libraries
+
+library(tseries)
+library(car)
+library(carData)
+library(bootUR)
+library(vars)
+library(sandwich)
+library(readr)
+library(lmtest)
+
+```
+This page was made using Rmarkdown and knitr.
+
+## Research
+
+I plan on investigating the relationship between Exports and Output and more specifically the impact of exports on the GDP growth. This is mainly because Belgium heavily relies on international trade.
+
+## Variables
+
+```{R Create Base Variables}
+
+# Output (Constant)
+
+YO_ts <- ts(BEL_data$YO, start = 1950, frequency = 1)
+
+lnYO <- log(YO_ts)
+
+dlnYO <- diff(lnYO)
+
+# Output (Current)
+
+YU_ts <- ts(BEL_data$YU, start = 1950, frequency = 1)
+
+lnYU <- log(YU_ts)
+
+dlnYU <- diff(lnYU)
+
+# Exports (Constant)
+
+XO_ts <- ts(BEL_data$XO, start = 1950, frequency = 1)
+
+lnXO <- log(XO_ts)
+
+dlnXO <- diff(lnXO)
+
+# Exports (Current)
+
+XU_ts <- ts(BEL_data$XU, start = 1950, frequency = 1)
+
+lnXU <- log(XU_ts)
+
+dlnXU <- diff(lnXU)
+
+# Imports (Constant)
+
+MO_ts <- ts(BEL_data$MO, start = 1950, frequency = 1)
+
+lnMO <- log(MO_ts)
+
+dlnMO <- diff(lnMO)
+
+# Imports (Current)
+
+MU_ts <- ts(BEL_data$MU, start = 1950, frequency = 1)
+
+lnMU <- log(MU_ts)
+
+dlnMU <- diff(lnMU)
+
+# Price deflator | Exports
+
+PX_ts <- XU_ts / XO_ts
+
+lnPX <- log(PX_ts)
+
+dlnPX <- diff(lnPX)
+
+# Price deflator | Imports
+
+PM_ts <- MU_ts / MO_ts
+
+lnPM <- log(PM_ts)
+
+dlnPM <- diff(lnPM)
+
+# Price deflator | GDP
+
+PY_ts <- YU_ts / YO_ts
+
+lnPY <- log(PY_ts)
+
+dlnPY <- diff(lnYO)
+
+```
+
+**Exploratory Data Analysis**
+
+```{R Base Plots}
+
+# Output
+
+ts.plot(lnYO, xlab = "Time", ylab = "lnYO")
+title(main = "Output", sub = "In log form")
+
+# Exports 
+
+ts.plot(lnXO, lnXU, col = c("black", "blue"), lty = c(1,1), xlab = "Time", ylab = "XO & XU")
+title(main = "Exports", sub = "In log form")
+legend("topleft", legend = c("XO", "XU"), col = c("black", "blue"), lty = c(1,1))
+
+# Price deflator (log)
+
+ts.plot(lnPY, lnPX, lnPM, col = c("black", "blue", "red"), lty = c(1,1,1), xlab = "Time", ylab = "PY, PX, & PM")
+title(main = "Price deflators", sub = "In the log form")
+legend("topleft", legend = c("PY", "PX", "PM"), col = c("black", "blue", "red"), lty = c(1,1,1))
+
+# Price deflator
+
+ts.plot(PY_ts, PX_ts, PM_ts, col = c("black", "blue", "red"), lty = c(1,1,1), xlab = "Time", ylab = "PY, PX, & PM")
+title(main = "Price deflators")
+legend("topleft", legend = c("PY", "PX", "PM"), col = c("black", "blue", "red"), lty = c(1,1,1))
+
+```
+
+It also seems from the plot of price deflators in standard form that the price deflator of GDP can be used as an approximation for the inflation rate.
+
+This variable is quite useful because Belgium is one of the few countries that employs a system of automatic wage indexation (meaning that wages are automatically increased to match the rate of inflation). This policy, however, has time and time again been criticized for being one of the reason for the lack of competitiveness of Belgian wages and firms in the global economy.
+
+Given that Belgium heavily relies on international trade due to its status as a small, rich and open economy, it is a must that Belgian companies are not only able to provide quality products but also products at a competitive price. If Belgian goods are too expensive then foreign consumers will choose to consume other cheaper alternatives. One aspect of the price of a good or service produced in any economy is the cost of labor (or wage).
+
+## Variables chosen
+
+This research project will focus on the impact of Exports $XO$ on Output $YO$.
+
+```{R Plots}
+# Chosen Variables in difference and logarithmic form
+
+ts.plot(dlnYO, dlnXO, col = c("black", "blue"), lty = c(1,1), xlab = "Time", ylab = "YO & XO")
+title(main = "Output & Export", sub = "In the difference and logarithmic form")
+legend("topleft", legend = c("YO", "XO"), col = c("black", "blue"), lty = c(1,1))
+
+```
+
+
+
+```{R Lags}
+
+# Log Output
+
+lags_lnYO <- embed(lnYO, dimension = 2)
+
+lnYO_0 <- lags_lnYO[, 1]
+lnYO_1 <- lags_lnYO[, 2]
+
+# Log Exports
+
+lags_lnXO <- embed(lnXO, dimension = 2)
+
+lnXO_0 <- lags_lnXO[, 1]
+lnXO_1 <- lags_lnXO[, 2]
+
+# Diff-Log Output
+
+lags_dlnYO <- embed(dlnYO, dimension = 2)
+
+dlnYO_0 <- lags_dlnYO[, 1]
+dlnYO_1 <- lags_dlnYO[, 2]
+
+# Diff-Log Exports
+
+lags_dlnXO <- embed(dlnXO, dimension = 2)
+
+dlnXO_0 <- lags_dlnXO[, 1]
+dlnXO_1 <- lags_dlnXO[, 2]
+
+
+```
+
+**Visual Inspection of Trends - Logarithm**
+
+**Output**
+
+Consider the following model for $lnYO_{t}$ with a trend:
+
+$$
+\tag{1}
+lnYO_{t} = \beta_{0} + \beta_{1} t + u_{t}
+$$
+
+```{R Model 1}
+
+# Create trend variable
+
+n1 <- length(lnYO_0)
+
+trend <- 1:n1
+
+# Estimate Model (1)
+
+model1 <- lm(lnYO_0 ~ trend)
+summary(model1)
+
+```
+
+The average trend of $lnYO_{t}$ is $0.02773$ and also statistically significant.
+
+```{R Trend Output 2}
+
+# Save Residual Model (1)
+
+resid1 <- model1$residuals
+
+# Plot
+
+plot(resid1, type = "l", ylab = "Resid", xlab = "Time")
+title(main = "Residuals of Model (1)")
+
+```
+
+```{R Stationarity Output}
+
+# ADF
+
+adf_lnYO <- adf(lnYO, deterministics = "trend")
+adf_lnYO
+
+# Union of Rejection
+
+union_lnYO <- boot_union(lnYO)
+union_lnYO
+
+```
+
+The variable $lnYO_{t}$ has a unit root as shown by those two tests. The series has a stochastic process around the trend.
+
+**Exports**
+
+Consider the following model for $lnXO_{t}$:
+
+$$
+\tag{2}
+lnXO_{t} = \beta_{0} + \beta_{1} t + u_{t}
+$$
+```{R Model 2}
+
+# Estimate Model (2)
+
+model2 <- lm(lnXO_0 ~ trend)
+summary(model2)
+
+```
+
+The average trend of $lnXO_{t}$ is $0.052655$ and it is statistically significant.
+
+```{R Trend Export 2}
+
+# Save Residuals Model (2)
+
+resid2 <- model2$residuals
+
+# Plot
+
+plot(resid2, type = "l", ylab = "Resid", xlab = "Time")
+title(main = "Residuals of Model (2)")
+
+```
+
+```{R Stationarity Export}
+
+# ADF
+
+adf_lnXO <- adf(lnXO, deterministics = "trend")
+adf_lnXO
+
+# Union of Rejection
+
+union_lnXO <- boot_union(lnXO)
+union_lnXO
+
+```
+
+Once again, the two test show that $lnXO_{t}$ has a stochastic trend.
+
+**Stationarity - Difference**
+
+**Output**
+
+Consider the first difference of $lnYO_{t}$:
+
+$$
+\Delta lnYO_{t}
+$$
+```{R Stationarity Output 2}
+
+# Union of Rejection I(1)
+
+union_dlnYO <- boot_union(dlnYO)
+union_dlnYO
+
+# Union of Rejection I(1)
+
+d2lnYO <- diff(dlnYO)
+
+union_d2lnYO <- boot_union(d2lnYO)
+union_d2lnYO
+
+```
+The test tells us that $lnYO_{t}$ in first differences is also not stationary. But it is stationary in second differences. The problem is that the variable has no practical economic interpretation in second difference and thus we will stick with $dlnYO_{t}$ as our "stationary" dependent variable.
+
+**Export**
+
+Consider the first difference of $lnXO_{t}$:
+
+$$
+\Delta lnXO_{t}
+$$
+
+```{R Stationarity Export 2}
+
+# Union of Rejection I(1)
+
+union_dlnXO <- boot_union(dlnXO)
+union_dlnXO
+
+```
+
+The first difference of $lnXO_{t}$ is already stationary.
+
+## Regression Analysis
+
+**Model 3**
+
+Consider the following static regression model:
+
+$$
+\tag{3}
+\Delta lnYO_{t} = \beta_{0} + \beta_{1} \Delta lnXO_{t} + u_{t}
+$$
+```{R Model 3}
+
+# Estimate Model (3)
+
+model3 <- lm(dlnYO_0 ~ dlnXO_0)
+summary(model3)
+
+```
+
+```{R Tests Model 3}
+
+# Save Residuals Model (3)
+
+resid3 <- model3$residuals
+
+# Plot
+
+plot(resid3, type = "l", ylab = "Resid", xlab = "Time")
+title(main = "Residuals of Model (3)")
+
+```
+
+**Breusch-Pagan test**
+
+```{R BPTest Model 3}
+
+# Run Test
+
+bptest(model3, varformula = ~ dlnXO_0)
+
+```
+
+**White Test**
+
+```{R White Test Model 3}
+
+# Run Test
+
+bptest(model3, varformula = ~ dlnXO_0 + I(dlnXO_0^2))
+
+```
+
+We cannot reject the null hypothesis for both test meaning the residuals are homoskedastic.
+
+**Model 4**
+
+Consider the following ARDL(1,0) model:
+
+$$
+\tag{4}
+\Delta lnYO_{t} = \beta_{0} + \beta_{1} \Delta lnXO_{t} + \beta_{2} \Delta lnYO_{t - 1}
+$$
+
+```{R Model 4}
+
+# Estimate Model (4)
+
+model4 <- lm(dlnYO_0 ~ dlnXO_0 + dlnYO_1)
+summary(model4)
+
+```
+
+```{R Test Model 4}
+
+# Save Residuals Model (4)
+
+resid4 <- model4$residuals
+
+# Plot
+
+plot(resid4, type = "l", ylab = "Resid", xlab = "Time")
+title(main = "Residuals of Model (4)")
+
+```
+
+**Breusch-Pagan Test**
+
+```{R BPTest Model 4}
+
+# Run Test
+
+bptest(model4, varformula = ~ dlnXO_0 + dlnYO_1)
+
+```
+
+
+**White Test**
+
+```{R White Test Model 4}
+
+# Run Test
+
+bptest(model4, varformula = ~ dlnXO_0 + dlnYO_1 + I(dlnXO_0^2) + I(dlnYO_1^2) + I(dlnYO_1*dlnXO_0))
+
+```
+
+Once again, both tests tell us that the residuals are homoskedastic.
+
+**Correlogram**
+
+**Output**
+
+```{R Correlogram Output}
+
+# Plot
+
+acf(dlnYO, main = "Correlogram of Output")
+
+```
+
+The first and second lags are significant and should probably be added to the next model to remove autocorrelation.
+
+**Exports**
+
+```{R Correlogram Exports}
+
+# Plot
+
+acf(dlnXO, main = "Correlogram of Exports")
+
+```
+
+There is no autocorrelation left in the $dlnXO_{t}$ series. We do not need to add any lags.
+
+**Model 5**
+
+Consider the following ARDL(2,0) model:
+
+$$
+\tag{5}
+\Delta lnYO_{t} = \beta_{0} + \beta_{1} \Delta lnXO_{t} + \beta_{2} \Delta lnYO_{t - 1} + \Delta \beta_{3} lnYO_{t - 2}
+$$
+
+**Variables**
+
+```{R Model 5}
+
+# Create Lagged Variables
+
+# Output
+
+lags_dlnYO2 <- embed(dlnYO, dimension = 3)
+
+dlnYO2_0 <- lags_dlnYO2[, 1]
+dlnYO2_1 <- lags_dlnYO2[, 2]
+dlnYO2_2 <- lags_dlnYO2[, 3]
+
+# Exports
+
+lags_dlnXO2 <- embed(dlnXO, dimension = 3)
+
+dlnXO2_0 <- lags_dlnXO2[, 1]
+dlnXO2_1 <- lags_dlnXO2[, 2]
+dlnXO2_2 <- lags_dlnXO2[, 3]
+
+# Estimate model (5)
+
+model5 <- lm(dlnYO2_0 ~ dlnXO2_0 + dlnYO2_1 + dlnYO2_2)
+summary(model5)
+
+```
+
+**Linear Hypothesis Test**
+
+```{R Linear Hypothesis Model 5}
+
+# Run Test
+
+linearHypothesis(model5, c("dlnXO2_0 = 0", "dlnYO2_1 = 0", "dlnYO2_2 = 0"), test = "F", vcov. = vcovHAC(model5, type = "HAC"))
+
+```
+
+
+```{R Test Model 5}
+
+# Save Residuals Model (5)
+
+resid5 <- model5$residuals
+
+# Plot 
+
+plot(resid5, type = "l", xlab = "Time", ylab = "Resid")
+title(main = "Residuals of Model (5)")
+
+```
+
+**Breusch-Pagan Test**
+
+```{R BPTest Model 5}
+
+# Run Test
+
+bptest(model5, varformula = ~ dlnXO2_0 + dlnYO2_1 + dlnYO2_2)
+
+```
+
+**White Test**
+
+```{R White Test Model 5}
+
+# Run Test
+
+bptest(model5, varformula = ~ dlnXO2_0 + dlnYO2_1 + dlnYO2_2 + I(dlnXO2_0^2) + I(dlnYO2_1^2) + I(dlnYO2_2^2) + I(dlnXO2_0*dlnYO2_1) + I(dlnXO2_0*dlnYO2_2) + I(dlnYO2_1*dlnYO2_2))
+
+```
+
+Again the tests tell us that the residuals are homoskedastic. There is still some structure left to be explained by the model.
+
+**Autocorrelation Problem**
+
+```{R Autocorrelation Model 5}
+
+# Lagged Variables
+
+ut5 <- embed(resid5, dimension = 2)
+
+ut5_0 <- ut5[, 1]
+ut5_1 <- ut5[, 2]
+
+# Plot (Time)
+
+ts.plot(ut5_0, xlab = "Time", ylab = "Resid")
+title(main = "Residuals of Model (5)")
+
+# Plot (Scatter)
+
+plot(x = ut5_0, y = ut5_1, xlab = "Residuals", ylab = "Lagged Residuals")
+title(main = "Scatter of the Residuals of Model (5)", sub = "Residuals against their first lags")
+
+```
+
+There does not seem to be a high level of autocorrelation even despite not including all the lags.
+
+**Ljung-Box Test**
+
+```{R Ljung-Box Test Model 5}
+
+n5 <- 62
+
+k5 <- round(sqrt(n5))
+
+q5 <- length(model5$coefficients)
+
+df5 <- k5 - q5
+
+# Run Test
+
+Box.test(model5$residuals, type = "Ljung-Box", lag = k5, fitdf = df5)
+
+```
+
+The residuals $u_{t}$ are not a sequence of white noise.
+
+```{R Residuals Model 5}
+
+# Regression
+
+model_ut5 <- lm(ut5_0 ~ ut5_1)
+summary(model_ut5)
+
+```
+
+The p-value of $\beta_{1}$ is not significant meaning that there might be no first-order autocorrelation.
+
+**Breusch-Godfrey Test**
+
+```{R BGTest Model 5}
+
+# Plot
+
+acf(ut5_0, main = "Correlogram of the Residuals")
+
+# Run Test
+
+bgtest(model5, order = 3)
+
+```
+
+According to the BG test, the residuals have no serial correlation since the p-value was too high to reject the null.
+
+**RESET Test**
+
+```{R RESET Model 5}
+
+# Run Test
+
+resettest(model5)
+
+```
+The p-value is above the 5% significance level meaning that we cannot reject the null hypothesis of Correct specification.
+
+**Model 6**
+
+Consider the following Vector AutoRegressive Model:
+
+$$
+\tag{6}
+\begin{bmatrix}
+\Delta lnYO_{t} \\ \Delta lnXO_{t} 
+\end{bmatrix}
+=
+\begin{bmatrix}
+c_{1} \\ c_{2}
+\end{bmatrix}
++ \sum^{p}_{j = 1}
+\begin{bmatrix}
+\phi_{j, 11} & \phi_{j, 12} 
+\\
+\phi_{j, 21} & \phi_{j, 22}
+\end{bmatrix}
+\begin{bmatrix}
+\Delta lnYO_{t - j} \\ \Delta lnXO_{t - j}
+\end{bmatrix}
++
+\begin{bmatrix}
+u_{1, t} \\ ut_{2, t}
+\end{bmatrix}
+
+$$
+
+**Augmented Dickey-Fuller**
+
+```{R ADF Model 6}
+
+# Run Test Output
+
+adf(dlnYO, deterministics = "intercept", max_lag = 0)
+
+# Run Test Export
+
+adf(dlnXO, deterministics = "intercept", max_lag = 0)
+
+```
+
+The low p-values of both tests indicate that both variables are likely stationary.
+
+**Estimate VAR**
+
+```{R Select Lags Model 6}
+
+# Dataset
+
+VAR6_data <- data.frame(dlnYO, dlnXO)
+
+# Select VAR order
+
+VARselect(VAR6_data)
+
+```
+
+The order given by the output is 2. It is the same for all Information Criteria.
+
+```{R Model 6}
+
+# Estimate Model (6)
+
+model6 <- VAR(VAR6_data, p = 2)
+summary(model6)
+
+```
+
+All the variables (other than the constant) are insignificant at the 5% level.
+
+**Residual analysis**
+
+```{R VAR Resid}
+
+# Creating Residuals
+
+resid6 <- resid(model6)
+
+resid6_dlnXO <- resid6[, 1]
+resid6_dlnYO <- resid6[, 2]
+
+# Plot resid6_dlnXO
+
+ts.plot(resid6_dlnXO, xlab = "Time", ylab = "Resid")
+title(main = "Residuals of Model 6 | Export")
+
+# Correlogram of resid6_dlnXO
+
+acf(resid6_dlnXO, main = "Correlogram of the Residuals", sub = "Residuals of Model 6 | Export")
+
+# Plot resid6_dlnYO
+
+ts.plot(resid6_dlnYO, xlab = "Time", ylab = "Resid")
+title(main = "Residuals of Model 6 | Output")
+
+# Correlogram of resid6_dlnYO
+
+acf(resid6_dlnYO, main = "Correlogram of the Residuals", sub = "Residuals of Model 6 | Output")
+
+# Cross-Correlogram
+
+ccf(x = resid6_dlnXO, y = resid6_dlnYO, main = "Cross-correlogram of the Residuals")
+
+```
+**Granger Causality**
+
+```{R Model 6 Granger Cause}
+
+# Run Test
+
+causality(x = model6, cause = "dlnYO")$Granger
+
+# Run Test
+
+causality(x = model6, cause = "dlnXO")$Granger
+
+
+```
+**Impulse Response Functions**
+
+```{R Model 6 IRF}
+
+# Run Function
+
+irf6 <- irf(model6, ortho = "F")
+plot(irf6)
+
+```
+
+**Model 7**
+
+There seems to be an omitted variable bias in the previous regressions that I estimated. For this reason I might follow the same path we followed in class and estimate a regression of export on income.And since we already that the first and second lags of $lnYO_{t}$ were significant we can already include them in our model.
+
+$$
+\tag{7}
+\Delta lnXO_{t} = \beta_{0} + \beta_{1} \Delta lnYO_{t} + \beta_{2} \Delta lnYO_{t - 1} + \beta_{3} \Delta lnYO_{t - 2}
+$$
+
+```{R Model 7}
+
+# Estimate Model (7)
+
+model7 <- lm(dlnXO2_0 ~ dlnYO2_0 + dlnYO2_1 + dlnYO2_2)
+summary(model7)
+
+```
+
+According to the output of model 7, only the coefficient of the first lag of dlnYO is insignificant.
+
+```{R Model 7 F-test 1}
+
+# Run Test
+
+linearHypothesis(model7, c("dlnYO2_1 = 0", "dlnYO2_2 = 0"), test = "F")
+
+```
+
+The p-value of the F-test is too low $0.005323$ and thus we can reject the null. At least one of the two variables is significantly different from 0.
+
+```{R Model 7 F-test 2}
+
+# Run Test
+
+linearHypothesis(model7, c("dlnYO2_0 = 0", "dlnYO2_1 = 0", "dlnYO2_2 = 0"), test = "F")
+
+```
+
+**Residual analysis**
+
+```{R}
+
+# Plot
+
+resid7 <- model7$residuals
+
+plot(resid7, type = "l", main = "Residuals of Model 7")
+
+```
+
+Now we need to check whether the residuals are heteroscedastic meaning that we have remove all the structure from the residuals and completely modeled the relation. This is done with a White test.
+
+```{R Model 7 White test}
+
+# Run Test
+
+bptest(model7, varformula = ~ dlnYO2_0 + dlnYO2_0 + dlnYO2_2 + I(dlnYO2_0^2) + I(dlnYO2_0^2) + I(dlnYO2_2^2) 
+       + I(dlnYO2_0*dlnYO2_0) + I(dlnYO2_0*dlnYO2_2) + I(dlnYO2_0*dlnYO2_2))
+
+```
+
+**Model 8**
+
+$$
+\tag{8}
+\Delta lnXO_{t} = \beta_{0} + \beta_{1} \Delta lnYO_{t}
+$$
+
+```{R Model 8}
+
+# Estimate Model (8)
+
+model8 <- lm(dlnXO ~ dlnYO)
+summary(model8)
+
+# Save Residuals
+
+resid8 <- model8$residuals
+
+# Plot
+
+acf(resid8, main = "Residuals of Model 8")
+
+```
+
+##  Introducing a new variable
+
+If we estimate model 8 to reduce the omitted variable bias problem that we had in the previous models. We might find it valuable to add a second variable, namely the exchange rate since we know from economic theory that exports positively depend on the exchange rate. An exchange rate decrease (currency appreciation leads to fewer exports as local goods become more expensive to foreign consumers).
+
+In this section, we will investigate the relationship between exports as the dependent variable and output and exchange rates as the independent variables. 
+
+**Exchange rates**
+
+```{R EXR}
+
+# Defining the variables
+
+EXR_ts <- ts(BEL_data$EXR, start = 1950, frequency = 1)
+
+lnEXR <- log(EXR_ts)
+
+dlnEXR <- diff(lnEXR)
+
+# Plot
+
+ts.plot(EXR_ts, xlab = "Time", ylab = "EXR")
+title(main = "Exchange rate of Belgium")
+
+# Plot
+
+ts.plot(lnEXR, xlab = "Time", ylab = "EXR")
+title(main = "Exchange rate of Belgium", sub = "In the logarithmic form")
+
+# Plot
+
+ts.plot(dlnEXR, xlab = "Time", ylab = "EXR")
+title(main = "Exchange rate of Belgium", sub = "In the difference & logarithmic form")
+
+```
+
+Belgium seems to have had a fixed exchange rate regime from 1950 to 1970. This leads me to fear that the stationary condition might not be met by this variable neither in the logarithmic nor the difference form. I will proceed with both and Augmented Dickey-Fuller and a union of rejection test on $lnEXR_{t}$ and $\Delta lnEXR_{t}$. There seems to be a small downward trend.
+
+```{R Stationarity EXR}
+
+# Run Test
+
+boot_lnEXR <- boot_union(lnEXR)
+boot_lnEXR
+
+adf(lnEXR, deterministics = "trend", max_lag = 0)
+
+```
+
+The p-value in the union of rejection test is above the 5% significance level meaning that there might be a unit root in this time series. This is confirmed by the Augmented Dickey-Fuller.
+
+```{R Stationarity EXR 2}
+
+# Run Test
+
+boot_dlnEXR <- boot_union(dlnEXR)
+boot_dlnEXR
+
+adf(dlnEXR, deterministics = "intercept", max_lag = 0)
+
+```
+
+The p-value of both test allows us to conclude that this series is stationary in difference and logarithmic form.
+
+**Model 9**
+
+Now let's consider the following model:
+
+$$
+\tag{9}
+\Delta lnXO_{t} = \beta_{0} + \beta_{1} \Delta lnYO_{t} + \beta_{4} \Delta lnEXR_{t}
+$$
+
+```{R Model 9}
+
+# Estimate Model (9)
+
+model9 <- lm(dlnXO ~ dlnYO + dlnEXR)
+summary(model9)
+
+# Save Residuals
+
+resid9 <- model9$residuals
+
+# Plot
+
+acf(resid9, main = "Residuals of Model 9")
+
+```
+
+The exchange variable is found to be insignificant but this is probably simply due to the autocorrelation in that variable. The solution here might be to add a second lag.
+
+**Model 10**
+
+Consider then the following model which is similar to model (9) but we have added a lagged version of $\Delta lnEXR_{t}$.
+
+$$
+\tag{10}
+\Delta lnXO_{t} = \beta_{0} + \beta_{1} \Delta lnYO_{t} + \beta_{4} \Delta lnEXR_{t} + \beta_{5} \Delta lnEXR_{t - 1}
+$$
+
+```{R Lags EXR}
+
+# Lagged Variables
+
+lags_dlnEXR <- embed(dlnEXR, dimension = 2)
+
+dlnEXR_0 <- lags_dlnEXR[, 1]
+dlnEXR_1 <- lags_dlnEXR[, 2]
+
+# Estimate Model (10)
+
+model10 <- lm(dlnXO_0 ~ dlnYO_0 + dlnEXR_0 + dlnEXR_1)
+summary(model10)
+
+```
+In this model, both version of the exchange rate are insignificant. This is annoying!
+
+**Correlogram**
+
+```{R Correlogram EXR}
+
+resid10 <- model10$residuals 
+
+# Run Test
+
+acf(resid10, main = "Correlogram of Resid 10")
+
+```
+
+**Heteroscedasticity in residuals**
+
+```{R Model 10 Hetero}
+
+# Run Test
+
+bptest(model10, varformula = ~ dlnYO_0 + dlnEXR_0 + dlnEXR_1 
+       + I(dlnYO_0^2) + I(dlnEXR_0^2) + I(dlnEXR_1^2) 
+       + I(dlnYO_0*dlnEXR_0) + I(dlnYO_0*dlnEXR_1) + I(dlnEXR_0*dlnEXR_1) )
+
+```
+
+
+**Joint Significance**
+
+We will test the following restrictions
+
+$$
+\beta_{4} = 0
+\\
+\beta_{5} = 0
+$$
+
+```{R F-Test Model 10}
+
+# Run Test
+
+linearHypothesis(model10, c("dlnEXR_0 = 0", "dlnEXR_1 = 0"), test = "F")
+
+```
+
+The high p-value of ```0.1879``` means that we cannot reject our null hypothesis. The two coefficient might be not significantly different from 0.
+
+**Conclusion**
+
+Model 9 and Model 10 teaches us that Model 8 might be the best model for the relation between Export and Output. 
+
+$$
+\tag{8}
+\Delta lnXO_{t} = \beta_{0} + \beta_{1} \Delta lnYO_{t}
+$$
+
+Once again, to avoid omitted variable bias, I will choose this model over model (5).
+
+We can also take a look at model (7).
+
+$$
+\tag{7}
+\Delta lnXO_{t} = \beta_{0} + \beta_{1} \Delta lnYO_{t} + \beta_{2} \Delta lnYO_{t - 1} + \beta_{3} \Delta lnYO_{t - 2}
+$$
+
+
+
+## Cointegration
+
+Since $lnYO_{t}$ and $lnXO_{t}$ are both $I(1)$ processes. There might exist a linear combination of the two that is $I(0)$. 
+
+The transformation looks like the following:
+
+$$
+y_{t} - \beta_{1} x_{t} = u_{t}
+$$
+
+```{R Cointegration 1}
+
+# Define Variable
+
+# APXO <- XO/YO <- Average Propensity to Export or Export to GDP ratio.
+
+LNAPXO <- lnXO - lnYO
+
+# Plot
+
+plot(x = LNAPXO, type ="l")
+
+```
+
+The export ratio does not seem to be stationary.
+
+**Augmented Dickey-Fuller**
+
+```{R ADF Cointegration}
+
+# Run Test
+
+adf(LNAPXO, deterministics = "intercept", max_lag = 0)
+
+```
+
+We can concluded that the two variables are not cointegrated since ```LNAPXO``` is not stationary.
+
+**Model (c)**
+
+Consider the following regression:
+
+$$
+\tag{c}
+lnXO_{t} = \beta_{0} + \beta_{1} lnYO_{t} + u_{t}
+$$
+
+```{R Model C}
+
+# Estimate Model (c)
+
+modelc <- lm(lnXO ~ lnYO)
+summary(modelc)
+
+# Save Residuals
+
+residc <- modelc$residuals
+
+# Plot
+
+plot(x = residc, type = "l", ylab = "Resid", xlab = "Time")
+title(main = "Residuals of Model (c)")
+
+```
+**Engle-Granger test**
+
+```{R Model c EG Test}
+
+# Run Test
+
+adf(residc, deterministics = "none", max_lag = 0)
+
+```
+The p-value is lower than the significance level implying that we do have cointegration between $lnXO_{t}$ and $lnYO_{t}$.
+
+**Model 11**
+
+Consider the following model:
+
+$$
+\tag{11}
+\Delta lnXO_{t} = \beta_{0} + \beta_{1} \Delta lnYO_{t}  + \beta_{4} \Delta lnEXR_{t} + u_{t}
+$$
+
+```{R Model 11}
+
+# Lagged Variables
+
+lags_dlnEXR2 <- embed(dlnXO, dimension = 3)
+
+dlnEXR2_0 <- lags_dlnEXR2[, 1]
+dlnEXR2_1 <- lags_dlnEXR2[, 2]
+dlnEXR2_2 <- lags_dlnEXR2[, 3]
+
+# Estimate Model (11)
+
+model11 <- lm(dlnXO2_0 ~ dlnYO2_0 + dlnEXR2_0)
+summary(model11)
+
+```
+
+**Model 12**
+
+$$
+\tag{12}
+\Delta lnXO_{t} = \beta_{0} + \beta_{1} \Delta lnYO_{t} + \beta_{2} \Delta lnYO_{t - 1} + \beta_{3} \Delta lnYO_{t - 2} + \beta_{4} \Delta lnEXR_{t} + \beta_{5} \Delta lnEXR_{t - 1}
+$$
+
+
+```{R Model 12}
+
+model12 <- lm(dlnXO2_0 ~ dlnYO2_0 + dlnYO2_1 + dlnYO2_2 + dlnEXR2_0 + dlnEXR2_1)
+summary(model12)
+
+```
+
+
+**Model 13**
+
+```{R Model 13}
+
+# Regression
+
+VAR13_data <- data.frame(dlnXO, dlnYO, dlnEXR)
+
+# Select order
+
+VARselect(VAR13_data)
+
+# Estimate Model (13)
+
+model13 <- VAR(VAR13_data, p = 1)
+summary(model13)
+
+```
+
+**Residual analysis**
+
+```{R Model 13 Resid}
+
+# Creating Residuals
+
+resid13 <- resid(model13)
+
+resid13_dlnXO <- resid13[, 1]
+resid13_dlnYO <- resid13[, 2]
+resid13_dlnEXR <- resid13[, 3]
+
+# Plot resid13_dlnXO
+
+ts.plot(resid13_dlnXO, xlab = "Time", ylab = "Resid")
+title(main = "Residuals of Model 13 | Export")
+
+# Correlogram of resid13_dlnXO
+
+acf(resid13_dlnXO, main = "Correlogram of the Residuals", sub = "Residuals of Model 13 | Export")
+
+# Plot resid13_dlnYO
+
+ts.plot(resid13_dlnYO, xlab = "Time", ylab = "Resid")
+title(main = "Residuals of Model 13 | Output")
+
+# Correlogram of resid13_dlnYO
+
+acf(resid13_dlnYO, main = "Correlogram of the Residuals", sub = "Residuals of Model 13 | Output")
+
+# Plot resid13_dlnEXR
+
+ts.plot(resid13_dlnEXR, xlab = "Time", ylab = "Resid")
+title(main = "Residuals of Model 13 | Exchange rate")
+
+# Correlogram of resid13_dlnEXR
+
+acf(resid13_dlnEXR, main = "Correlogram of the Residuals", sub = "Residuals of Model 13 | Exchange rate")
+
+# Cross-Correlogram
+
+ccf(x = resid13_dlnXO, y = resid13_dlnYO, main = "Cross-correlogram of the Residuals")
+
+```
+
+
+**Model 14**
+
+$$
+\tag{14}
+\Delta lnXO_{t} + \beta_{0} + \beta_{1} \Delta lnYO_{t} + \beta_{2} \Delta lnYO_{t - 1} + \beta_{4} \Delta lnEXR_{t} + u_{t}
+$$
+```{R Model 14}
+
+model14 <- lm(dlnXO_0 ~ dlnYO_0 + dlnYO_1 + dlnEXR_0)
+summary(model14)
+
+```
+
+```{R Model 14 Resid}
+
+resid14 <- model14$residuals
+
+plot(resid14, type = "l", main = "Residuals of Model 14")
+
+acf(resid14, main = "Correlogram of Residuals")
+
+linearHypothesis(model14, c("dlnYO_1 = 0", "dlnEXR_0 = 0"), test = "F")
+
+```
+
+
+```{R Model 14 BPTest}
+
+# Run Test
+
+bptest(model14, varformula = ~ dlnYO_0 + dlnYO_1 + dlnEXR_0
+       + I(dlnYO_0^2) + I(dlnYO_1^2) + I(dlnEXR_0^2)
+       + I(dlnYO_0*dlnYO_1) + I(dlnYO_0*dlnEXR_0) + I(dlnYO_1*dlnEXR_0))
+
+```
+
+

@@ -1,0 +1,446 @@
+---
+title: "Tutorial6"
+author: "Andre-Ignace Ghonda Lukoki"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{css display, echo = FALSE}
+
+    img, fig {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        width: 70%;
+    }
+    p {
+        font-family: "et-book-roman-old-style";
+    }
+    h1 {
+        text-align: center;
+    }
+
+    .marginnote {
+        float: right;
+        clear: right;
+        margin-right: -60%;
+        width: 50%;
+        margin-top: 0.3rem;
+        margin-bottom: 0;
+        font-size: 10;
+        line-height: 1.3;
+        vertical-align: baseline;
+        position: relative;
+    }
+
+```
+
+# Vector AutoRegressive Models
+
+$$
+\tag{20}
+\begin{split}
+\begin{bmatrix}
+\Delta lnIO_{t} \\ \Delta lnYO_{t} 
+\end{bmatrix} 
+= 
+\begin{bmatrix} 
+c_{1} \\ c_{2}
+\end{bmatrix}
++
+\sum^{p}_{j = 1}
+\begin{bmatrix}
+\phi_{j, 11} & \phi_{j, 12} \\ \phi_{j, 21} & \phi_{j, 22}
+\end{bmatrix}
+\begin{bmatrix}
+\Delta lnIO_{t - j} \\ \Delta lnYO_{t - j}
+\end{bmatrix}
++
+\begin{bmatrix}
+u_{1,t} \\ u_{2,t}
+\end{bmatrix}
+\end{split}
+$$
+
+## 1. Setting up R
+
+```{R setup up}
+
+load("BEL_data.Rdata")
+attach(BEL_data)
+
+# View variables
+
+names(BEL_data)
+
+# Load library
+
+library(tseries)
+
+# Declaring Variables
+
+IO_ts <- ts(BEL_data$IO, start = 1950, frequency = 1)
+YO_ts <- ts(BEL_data$YO, start = 1950, frequency = 1)
+
+lnIO <- log(IO_ts)
+lnYO <- log(YO_ts)
+
+dlnIO <- diff(lnIO)
+dlnYO <- diff(lnYO)
+
+```
+
+## 2. Obtaining Stationary Time series
+
+### Exercise 2a
+
+```{R Time series plot}
+
+ts.plot(dlnIO, xlab = "Time", ylab = "Investments")
+title(main = "Time plot of Investment", sub = "In the difference and logarithmic form")
+
+```
+
+The plot does look somewhat stationary.
+
+### Exercise 2b
+
+```{R Test for Stationarity | Investment}
+
+# Load library
+
+library(bootUR)
+
+# Run Test
+
+adf(dlnIO, deterministics = "intercept", max_lag = 0)
+
+```
+
+### Exercise 2c
+
+The low p-value of $9.043 * 10^{-10}$ indicates that the series is likely stationary.
+
+### Exercise 2d
+
+```{R Test for Stationarity | Output}
+
+# Run Test
+
+adf(dlnYO, deterministics = "intercept", max_lag = 0)
+
+```
+
+Again, the low p-value of $1.066 * 10^{-5}$ indicates that the series is likely stationary.
+
+### Exercise 2e
+
+Both series were found to be stationary.
+
+## 3. Estimating a VAR(1)
+
+```{R Estimate VAR model}
+
+# Load library
+
+library(vars)
+
+# Regression
+
+VAR_data <- data.frame(dlnIO, dlnYO)
+
+fit_var1 <- VAR(VAR_data, p = 1)
+summary(fit_var1)
+
+```
+
+### Exercise 3a
+
+$$
+\begin{split}
+\Delta lnIO &= 0.009503 - 0.233860 * \Delta lnIO_{t - 1} + 1.016880 * \Delta lnYO_{t - 1}
+\\ {} \\
+\Delta lnYO &= 0.01350 - 0.08883 * \Delta lnIO_{t - 1} + 0.58727  * \Delta lnYO_{t - 1}
+\end{split}
+$$
+
+### Exercise 3b
+
+$$
+\begin{bmatrix}
+\Delta lnIO_{t} \\ \Delta lnYO_{t} 
+\end{bmatrix} 
+= 
+\begin{bmatrix} 
+0.009503 \\ 0.01350
+\end{bmatrix}
++
+\sum^{p}_{j = 1}
+\begin{bmatrix}
+- 0.233860 & 1.016880 \\ - 0.08883 & 0.58727
+\end{bmatrix}
+\begin{bmatrix}
+\Delta lnIO_{t - j} \\ \Delta lnYO_{t - j}
+\end{bmatrix}
++
+\begin{bmatrix}
+u_{1,t} \\ u_{2,t}
+\end{bmatrix} 
+$$
+
+The value of the coefficient $\hat{\phi}_{1, 12}$ is $1.016880$ and it has a p-value of $0.174$ and thus is not significant at the 5% level.
+
+Interpretation:
+
+### Exercise 3c
+
+The value of the coefficient $\hat{\phi}_{1, 21}$ is $- 0.08883$ and it has a p-value of $0.04640$ and thus is significant at the 5% level.
+
+Interpretation:
+
+### Exercise 3d
+
++------------------------+------------------------------+----------------------------+
+|                        | Equation \`\`\``dlnIO`\`\`\` | Equation \`\``dlnYO`\`\`\` |
++========================+==============================+============================+
+| **Multiple R-squared** | ```                          | ```                        |
+|                        | 0.03266                      | 0.1656                     |
+|                        | ```                          | ```                        |
++------------------------+------------------------------+----------------------------+
+| **Adjusted R-squared** | ```                          | ```                        |
+|                        | 0.0004192                    | 0.1377                     |
+|                        | ```                          | ```                        |
++------------------------+------------------------------+----------------------------+
+
+These $R^{2}$ tells us the percentage of the variation in our dependent variable that is explained by our model.
+
+## 4. Validating the VAR(1)
+
+```{R Validate Model}
+
+resid_var1 <- resid(fit_var1) 
+
+resid_dlnIO <- resid_var1[, 1]
+resid_dlnYO <- resid_var1[, 2]
+
+```
+
+### Exercise 4a
+
+```{R Residual Analysis 1}
+
+ts.plot(resid_dlnIO, xlab = "Time", ylab = "Residuals")
+title(main = "Residuals of VAR(1) | Investment")
+
+```
+
+There does not seems to be a serious autocorrelation problem.
+
+### Exercise 4b
+
+```{R Correlogram 1}
+
+# Run Test
+
+acf(resid_dlnIO, main = "Correlogram of the Residuals", sub = "Residuals of VAR(1) | Investment")
+
+```
+
+Expect for the 10th lag, there is no significant autocorrelation.
+
+### Exercise 4c
+
+```{R Residual Analysis 2}
+
+ts.plot(resid_dlnYO, xlab = "Time", ylab = "Residuals")
+title(main = "Residuals of VAR(1) | Output")
+
+```
+
+There might be some autocorrelation.
+
+```{R Correlogram 2}
+
+# Run Test
+
+acf(resid_dlnYO, main = "Correlogram of the Residuals", sub = "Residuals of VAR(1) | Output")
+
+```
+
+In this case, there is no significant autocorrelation.
+
+### Exercise 4d
+
+```{R Cross-Correlogram}
+
+# Run Test
+
+ccf(x =resid_dlnIO, y = resid_dlnYO, main = "Cross-correlagram of the Residuals")
+
+```
+VAR models only allow for correlation between the two variables at time $t = 0$. But lagged values of both variables must be completely uncorrelated.
+
+The cross-correlogram check the correlation between one variable at time $t = 0$ and the other variable at time $t + 1$ for example.
+
+
+## 5. Selecting the order of the VAR
+
+```{R Order of VAR}
+
+VARselect(VAR_data)
+
+```
+
+### Exercise 5a
+
+The output shows us that the lag order is 3.
+
+### Exercise 5b
+
+The output shows us that the lag order is 1
+
+### Exercise 5c
+
+```{R Estimate VAR(3)}
+
+fit_var3 <- VAR(VAR_data, p = 3)
+summary(fit_var3)
+
+```
+
+### Exercise 5d
+
+There are more lags of $\Delta lnIO_{t}$ and $\Delta lnYO_{t}$ included in the model. We have up to the third lag of each variable.
+
+### Exercise 5e
+
+```{R Validate VAR(3)}
+
+# Creating Residuals
+
+resid_var3 <- resid(fit_var3)
+
+resid3_dlnIO <- resid_var3[, 1]
+resid3_dlnYO <- resid_var3[, 2]
+
+# Line graph of resid3_dlnIO
+
+ts.plot(resid3_dlnIO, xlab = "Time", ylab = "Residuals")
+title(main = "Residuals of VAR(3) | Investment")
+
+# Correlogram of resid3_dlnIO
+
+acf(resid3_dlnIO, main = "Correlogram of the Residuals", sub = "Residuals of VAR(3) | Investment")
+
+# Line graph of resid3_dlnYO
+
+ts.plot(resid3_dlnYO, xlab = "Time", ylab = "Residuals")
+title(main = "Residuals of VAR(3) | Output")
+
+# Correlogram of resid3_dlnYO
+
+acf(resid3_dlnYO, main = "Correlogram of the Residuals", sub = "Residuals of VAR(3) | Output")
+
+# Cross-Correlogram
+
+ccf(x = resid3_dlnIO, y = resid3_dlnYO, main = "Cross-correlogram of the Residuals")
+
+```
+
+Once again, for Investment only the 10th lag is significant and none of the lags are significant for Output.
+
+## 6. Granger Causality in VARs
+
+### Exercise 6a
+
+Null Hypothesis: Output growth does not Granger cause investment growth.
+
+$$
+H_{0}: \phi_{1, 12} = \dots = \phi_{p, 12} = 0
+$$
+
+Alt. Hypothesis: Output growth does Granger cause investment growth.
+
+$$
+H_{0}: \phi_{1, 12} = \dots = \phi_{p, 12} \not = 0
+$$
+
+### Exercise 6b
+
+```{R Granger Causality 1}
+
+# Run Test
+
+causality(x = fit_var1, cause = "dlnYO")$Granger
+
+```
+
+The p-value is 0.1715, thus insigificant at the 5% level. We cannot reject the null. Output growth might not Granger cause Investment growth.
+
+### Exercise 6c
+
+```{R Granger Causality 2}
+
+# Run Test
+
+causality(x = fit_var1, cause = "dlnIO")$Granger
+
+```
+
+The p-value is 0.04418, below the significance level. We reject the null meaning that we can reasonably assume that investment growth does Granger cause Output growth.
+
+### Exercise 6d
+
+The p-values given by both tests are similar to the significance of the variables in the equation for $dlnIO$ for the first test and the equation for $dlYO$ for the second test.
+
+### Exercise 6e
+
+```{R Granger Causilty 3}
+
+# Run Test [1]
+
+causality(x = fit_var3, cause = "dlnYO")$Granger
+
+# Run Test [2]
+
+causality(x = fit_var3, cause = "dlnIO")$Granger
+
+```
+### Exercise 6f
+
+No! The p-value is still above the significance level.
+
+### Exercise 6g
+
+Yes! The p-value is now above the significance level meaning that we cannot reject the null hypothesis.
+
+### Exercise 6h
+
+No!
+
+## 7. Impulse Response Functions in VARs
+
+### Exercise 7a
+
+The impulse functions measures the impact of a shock on the independent variable on the dependent variable.
+
+### Exercise 7b
+
+```{R Impulse Response Functions}
+
+# Run Function
+
+irf_var3 <- irf(fit_var3, ortho = F)
+plot(irf_var3)
+
+```
+
+### Exercise 7c
+
+I don't know

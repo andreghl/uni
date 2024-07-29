@@ -1,0 +1,690 @@
+---
+title: "Tutorial5"
+author: "Andre-Ignace Ghonda Lukoki"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{css display, echo = FALSE}
+
+    img, fig {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        width: 70%;
+    }
+    p {
+        font-family: "et-book-roman-old-style";
+    }
+    h1 {
+        text-align: center;
+    }
+    body {
+        background-color: #fffff8;
+        color: #111;
+        width: 70%;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .marginnote {
+        float: right;
+        clear: right;
+        margin-right: -60%;
+        width: 50%;
+        margin-top: 0.3rem;
+        margin-bottom: 0;
+        font-size: 10;
+        line-height: 1.3;
+        vertical-align: baseline;
+        position: relative;
+    }
+
+```
+
+# Specification Tests
+
+<br>
+
+## 1. Setting up R
+
+<br>
+
+```{R Set Up}
+
+load("BEL_data.Rdata") # Working Directory -> "Empirical Econometrics"\Tutorials
+attach(BEL_data)
+
+# View variables
+
+names(BEL_data)
+
+```
+
+In this tutorial, you will submit your investment-growth specification to several quality controls. You can (and should) do this for all the regressions you run (in your paper). In this tutorial, we focus, as an example, on the two-period distributed lag model.
+
+$$
+\tag{27}
+lnIO_{t} = \beta_{0} + \beta_{1} lnYO_{t} + \beta_{2} lnYO_{t - 1} + u_{t}
+$$
+
+```{R Declaring Variables}
+
+IO_ts <- ts(BEL_data$IO, start = 1950, frequency = 1)
+YO_ts <- ts(BEL_data$YO, start = 1950, frequency = 1)
+
+# Logarithms
+
+lnIO <- log(IO_ts)
+lnYO <- log(YO_ts)
+
+# Lagged variables
+
+lags_lnIO <- embed(lnIO, dimension = 2)  
+lags_lnYO <- embed(lnYO, dimension = 2)
+
+lnIO_0 <- lags_lnIO[, 1]
+lnIO_1 <- lags_lnIO[, 2]
+
+lnYO_0 <- lags_lnYO[, 1]
+lnYO_1 <- lags_lnYO[, 2]
+
+```
+
+## 2. Test of the distributional assumptions
+
+<br>
+
+### Exercise 2a
+
+--
+
+```{R Model 27}
+
+# Regression
+
+fit_fdl <- lm(lnIO_0 ~ lnYO_0 + lnYO_1)
+summary(fit_fdl)
+
+# Save Residuals
+
+resid_fdl <- fit_fdl$residuals
+
+# Plot Residuals
+
+plot(x = resid_fdl, type = "l", xlab = "Time", ylab ="Residuals")
+title(main = "Residuals of Model (27)")
+
+```
+
+The homoskedasticity assumption does not seem to hold. Heteroskedasticity does not result in bias in the estimated coefficients because *"Unbiasedness of OLS"* only requires Assumptions TS.1 to TS.3 to hold. But does result in a biased estimation of the variance. This means that statistical tests (that rely on the estimated standard error) cannot be trusted.
+
+### Exercise 2b
+
+--
+
+The **Breusch-Pagan test** seeks to determine whether the errors $u_{t}$ are heteroskedastic by testing whether the squared errors $\hat{u}^{2}_{t}$ (the error variance) depend on the independent variables. It does this by testing the joint significance of the explanatory variables regressed on the error term using an F-test.
+
+**Breusch-Pagan test**
+
+Null Hypothesis: Homoskedasticity
+
+$$
+H_{0} : Var(u |x_{1}, ..., x_{k}) = \sigma^{2}
+$$ 
+
+Alt. Hypothesis: Heteroskedasticity
+
+### Exercise 2c
+
+--
+
+```{R Breusch-Pagan Test}
+
+# Load Package
+
+library(lmtest)
+
+# Run test
+
+bptest(fit_fdl, varformula = ~ lnYO_0 + lnYO_1)
+
+
+```
+
+The p-value is above the 5% significance level and thus we fail to reject the null hypothesis. We can conclude that the residuals are homoskedastic.
+
+### Exercise 2d
+
+--
+
+The main drawback of the BP test can only detect linear relationships. The **White test** has the same null and alt. hypothesis but it includes the squares and the cross-products of the independent variables.
+
+### Exercise 2e
+
+--
+
+```{R White Test}
+
+bptest(fit_fdl, varformula =  ~ lnYO_0 + lnYO_1 + I(lnYO_0^2) + I(lnYO_1^2) + lnYO_0*lnYO_1)
+
+```
+
+We can conclude that the residuals are heteroskedastic because the p-value is significant.
+
+### Exercise 2f
+
+--
+
+```{R Robust SE}
+
+# Load Package
+
+library(sandwich)
+
+# Run Test
+
+coeftest(fit_fdl, vcov = vcovHC(fit_fdl, type = "HC"))
+
+```
+
+Yes, the std errors, t-stats, and p-values change.
+
+### Exercise 2g
+
+--
+
+```{R Joint Hypothesis}
+
+# Load Package
+
+library(car, carData)
+
+# Run Test
+
+linearHypothesis(fit_fdl, c("lnYO_0 = 0", "lnYO_1 = 0"), test = "F", vcov. = vcovHC(fit_fdl, type = "HC"))
+
+```
+
+The extremely low p-value allows us to reject the null hypothesis. We can conclude that at least one of the coefficient is significantly different from 0.
+
+## 3. Testing for Autocorrelation
+
+<br>
+
+### Exercise 3a
+
+--
+
+Autocorrelation does not result in a biased estimation of the coefficients. If this assumption fails, then only the variance is biased.
+
+### Exercise 3b
+
+--
+
+```{R Error Term}
+
+# Lagged variables
+
+ut <-embed(resid_fdl, dimension = 2)
+
+ut_0 <- ut[, 1]
+ut_1 <- ut[, 2]
+
+# Plot Residuals (Time)
+
+ts.plot(ut_0, xlab = "Time", ylab = "Residuals")
+title(main = "Residuals of Model (27)")
+
+# Plot Residuals (Scatter)
+
+plot(x = ut_0, y = ut_1, xlab = "Residuals", ylab = "Lagged Residuals")
+title(main = "Scatter of the Residuals of Model (27)", sub = "Residuals against their first lags")
+
+
+```
+
+The graphs show that the errors have some degree of autocorrelation.
+
+### Exercise 3c
+
+--
+
+The **Ljung-Box Test** checks whether the errors $u_{t}$ are a sequence of independent and identically distributed stochastic variables (or white noise).
+
+**Ljung-Box Test**
+
+Null Hypothesis: White Noise
+
+$$
+H_{0}: \rho_{1} = \rho_{2} = \dots = \rho_{kmax} = 0
+$$
+
+Alt. Hypothesis:
+
+$$
+H_{A}: \rho_{j} \not = 0 \space \text{for at least one } \space j
+$$
+
+Here, $\rho_{j}$ is the *j*-th autocorrelation of $u_{t}$.
+
+```{R Ljung-Box Test}
+
+n <- 63
+
+k <- round(sqrt(n))
+
+df <- k - 3
+
+# Run Test
+
+Box.test(fit_fdl$residuals, type = "Ljung-Box", lag = k, fitdf = df)
+
+```
+
+We can conclude from the low p-value that the errors $u_{t}$ are sequence of white noise.
+
+### Exercise 3d
+
+--
+
+```{R Asymptotic T-test}
+
+# Regression
+
+ut0_ut1 <- lm(ut_0~ut_1)
+summary(ut0_ut1)
+
+```
+
+The p-value is very low. We can conclude that there is some autocorrelation.
+
+### Exercise 3e
+
+--
+
+The test requires that the regression to only have exogenous regressors meaning that it cannot include any lags of the dependent variable. It also can only test for first-order autocorrelation.
+
+The **Breusch-Godfrey Test** differs from the Asymptotic t-test because it can also test for autocorrelation in autoregressive models.
+
+**Breusch-Godfrey Test**
+
+Null Hypothesis: No (*q*-th order) serial correlation
+
+$$
+H_{0}: \rho_{1} = \rho_{2} = \dots = \rho_{q} = 0
+$$
+
+Alt. Hypothesis:
+
+$$
+H_{A}: \rho_{j} \not = 0 \space \text{for at least one } \space j
+$$
+
+### Exercise 3f
+
+--
+
+```{R Correlogram}
+
+# Run Test
+
+acf(ut_0, main = "Correlogram of the Residuals")
+
+```
+
+```{R Breusch-Godfrey Test}
+
+bgtest(fit_fdl, order = 4)
+
+```
+
+The p-value is very low meaning we can reject the null hypothesis. We conclude that the errors do have autocorrelation.
+
+## 4. Autocorrelation-robust standard errors
+
+<br>
+
+```{R Newey-West (HAC) SE}
+
+coeftest(fit_fdl, vcov = vcovHAC(fit_fdl))
+
+```
+
+### Exercise 4a
+
+--
+
+**Comparison of Estimated Coefficient**
+
++--------------+--------------+---------------+----------------+
+|              | Model 27     | HC Std. Error | HAC Std. Error |
++==============+==============+===============+================+
+| Intercept    | ```          | ```           | ```            |
+|              | -2.8288      | -2.82882      | -2.82882       |
+|              | ```          | ```           | ```            |
++--------------+--------------+---------------+----------------+
+| $lnYO_0$     | ```          | ```           | ```            |
+|              | 3.6344       | 3.63437       | 3.63437        |
+|              | ```          | ```           | ```            |
++--------------+--------------+---------------+----------------+
+| $lnYO_1$     | ```          | ```           | ```            |
+|              | -2.5354      | -2.53541      |  -2.53541      |
+|              | ```          | ```           | ```            |
++--------------+--------------+---------------+----------------+
+
+They are not very different from one another.
+
+### Exercise 4b
+
+--
+
++--------------------+--------------------+---------------------+---------------------+
+|                    | Model 27           | HC Std. Error       | HAC Std. Error      |
++====================+====================+=====================+=====================+
+| **Standard Error** | ```                | ```                 | ```                 |
+|                    | 0.6811; 0.6704     | 0.63129; 0.62598    | 0.63982; 0.65505    |
+|                    | ```                | ```                 | ```                 |
++--------------------+--------------------+---------------------+---------------------+
+| **T-statistic**    | ```                | ```                 | ```                 |
+|                    | 5.336; -3.782      |  5.7570; -4.0503    | 5.6803; -3.8705     |
+|                    | ```                | ```                 | ```                 |
++--------------------+--------------------+---------------------+---------------------+
+| **P-value**        | ```                | ```                 | ```                 |
+|                    | 1.47e-06; 0.000357 | 2.98e-07; 0.0001468 | 3.997e-07; 0.000267 |
+|                    | ```                | ```                 | ```                 |
++--------------------+--------------------+---------------------+---------------------+
+
+### Exercise 4c
+
+--
+
+```{R Joint Hypothesis (2)}
+
+linearHypothesis(fit_fdl, c("lnYO_0 = 0", "lnYO_1 = 0"), test = "F", vcov. = vcovHAC(fit_fdl, type = "HAC"))
+
+```
+
+The p-value is very low meaning we can reject the null hypothesis. We can conclude that at least of the coefficient is significantly different from 0.
+
+## 5. Test of the linearity of the specification
+
+<br>
+
+### Exercise 5a
+
+--
+
+The **Ramsey's Regression Specification Error Test** (RESET) checks whether the relation between the independent variables and the explained variable is linear. When we estimate a linear regression, this test allows to tell whether the regression is in the correct form.
+
+This is done by doing a joint hypothesis test on the polynomials of the dependent variable.
+
+The estimated model looks like:
+
+$$
+y = \beta_{0} + \beta_{1} x_{1} + \dots + \beta_{k} x_{k} + \delta_{1} \hat{y}^{2} + \delta_{2} \hat{y}^{3} + e
+$$
+
+**Ramsey's RESET**
+
+Null Hypothesis: Correct specification
+
+Alt. Hypothesis: Incorrect specification
+
+### Exercise 5b
+
+--
+
+```{R Ramsey RESET}
+
+resettest(fit_fdl)
+
+```
+
+The p-value of this test is very low and thus the null hypothesis can be rejected. This means that the model is not correctly specified.
+
+The regression is not linear in parameter and TS.1 does not hold.
+
+## 6. Testing for structural breaks
+
+<br>
+
+### Exercise 6a
+
+--
+
+```{R Time Plot}
+
+ts.plot(lnIO, lnYO, xlab = "Time", ylab = "IO and YO", col = c("blue","black"))
+title(main = "Investment & Output", sub = "In the logarithmic form")
+legend("topleft", legend = c("IO", "YO"), col = c("blue", "black"), lty = c(1,1))
+
+```
+
+The major historical event could be the creation of the single European market in 1992.
+
+### Exercise 6b
+
+--
+
+```{R Checking}
+
+# Check length
+
+length(lnIO_0)
+
+# Find date 1992
+
+length(YEAR)
+
+YEAR[43]
+
+# Data of 1992 for variables must be Data[42]
+
+b = 42
+
+```
+
+```{R Creating Subsamples}
+
+# Creating the sub-samples
+
+# lnIO_0
+
+lnIO_0_sub1 <- lnIO_0[1:42]
+
+lnIO_0_sub2 <- lnIO_0[43:64]
+
+# lnIO_1
+
+lnIO_1_sub1 <- lnIO_1[1:42]
+
+lnIO_1_sub2 <- lnIO_1[43:64]
+
+# lnYO_0
+
+lnYO_0_sub1 <- lnYO_0[1:42]
+
+lnYO_0_sub2 <- lnYO_0[43:64]
+
+# lnYO_1
+
+lnYO_1_sub1 <- lnYO_1[1:42]
+
+lnYO_1_sub2 <- lnYO_1[43:64]
+
+```
+
+### Exercise 6c
+
+--
+
+```{R Models}
+
+summary(fit_fdl)
+
+fit_fdl_1 <- lm(lnIO_0_sub1 ~ lnYO_0_sub1 + lnYO_1_sub1)
+
+summary(fit_fdl_1)
+
+fit_fdl_2 <- lm(lnIO_0_sub2 ~ lnYO_0_sub2 + lnYO_1_sub2)
+
+summary(fit_fdl_2)
+
+```
+
+### Exercise 6d
+
+--
+
+**Structural Break Test**
+
+Null Hypothesis: No Break
+
+Alt. Hypothesis: There is a break
+
+The test statistic for this test is a partial F-test.
+
+$$
+F = \frac {(SSR_{C} - (SRR_{B} + SSR_{A}))/q}{(SRR_{B} + SSR_{A})/(n-2q)}
+$$
+
+where
+
+- $q$ is the number of parameters,
+
+- $n$ is the sample size in the combined regression $C$.
+
+
+```{R F-Test}
+
+SSR_c <- sum(fit_fdl$residuals^2)
+
+SSR_a <- sum(fit_fdl_1$residuals^2)
+
+SSR_b <- sum(fit_fdl_2$residuals^2)
+
+q <- 3
+
+n <- 64
+
+F_break <-  ((SSR_c - (SSR_a + SSR_b))/q)/((SSR_a + SSR_b)/(n - 2*q))
+
+print(F_break)
+
+c_3_60 <- 2.76
+
+# Find the critical value for df = 3, 64 and 0.05 levels
+
+c <- qf(p=0.05, df1 = 3, df2 = 64, lower.tail = FALSE)
+
+library(reticulate)
+
+```
+
+```{python F-test }
+
+# Test
+
+if r.F_break < r.c:
+  print("NULL: There is no break")
+else:
+  print("ALT.: At least one of the coefficient are different. There might be a structural break.")
+
+```
+
+### Exercise 6e
+
+--
+
+$$
+\tag{28}
+lnIO_{t} = \beta_{0} + \alpha_{0} \times dummy_{t} + \beta_{1} lnYO_{t} + \beta_{2} lnYO_{t - 1} + \alpha_{1} lnYO_{t} \times dummy_{t} + \alpha_{2} lnYO_{t - 1} \times dummy_{t} + u_{t}
+$$
+
+```{R Dummy}
+
+dummy <- c(rep(0, b), rep(1, 65 - b))
+
+lag_dummy <- embed(dummy, dimension = 2)
+
+dummy_0 <- lag_dummy[, 1]
+
+lnYO_0_dum <- lnYO_0*dummy_0
+
+lnYO_1_dum <- lnYO_1*dummy_0
+
+```
+
+### Exercise 6f
+
+--
+
+```{R Structural Break Model}
+  
+fit_fdl_break <- lm(lnIO_0 ~ lnYO_0 + lnYO_1 + dummy_0 + lnYO_0_dum + lnYO_1_dum)
+summary(fit_fdl_break)
+```
+
+### Exercise 6g
+
+--
+
+The value of the dummy variables is roughly equal to the different in the value of the coefficients in the two broken models.
+
+### Exercise 6h
+
+--
+
+The null hypothesis would look like this:
+
+$$
+\begin{split}
+H_{0}: \alpha_0 &= 0, \\
+\alpha_1 &= 0, \\
+\alpha_2 &= 0.
+\end{split}
+$$
+
+### Exercise 6i
+
+--
+
+<div class = "marginnote">
+
+Question from Riccardo
+<br>
+Check the F-tests! <br>
+Which one should I use?
+
+</div>`
+
+```{R F-test Structural Break}
+
+linearHypothesis(fit_fdl_break, c("dummy_0 = 0", "lnYO_0_dum = 0", "lnYO_1_dum = 0"), test="F")
+
+```
+
++-------------+-----------------------+-----------------+
+|             | Structural Break Test | Computed F-test |
++=============+=======================+=================+
+| F-statistic | ```                   | ```             |
+|             | 7.2104                | 6.691441        |
+|             | ```                   | ```             |
++-------------+-----------------------+-----------------+
+| P-value     | ```                   | ```             |
+|             | 0.0003408             |  > 0.05         |
+|             | ```                   | ```             |
++-------------+-----------------------+-----------------+
+
+
+### Exercise 6j
+
+--
+
+The regression does not appear to have constant coefficient. Our test shows that the creation of the single European market has had an impact on the relationship between the two variables.
